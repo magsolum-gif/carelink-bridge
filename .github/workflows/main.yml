@@ -1,0 +1,21 @@
+name: Run Bridge
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+jobs:
+  run-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - run: npm start
+        env:
+          CARELINK_USERNAME: ${{ secrets.CARELINK_USERNAME }}
+          CARELINK_PASSWORD: ${{ secrets.CARELINK_PASSWORD }}
+          NS: ${{ secrets.NS }}
+          API_SECRET: ${{ secrets.API_SECRET }}
