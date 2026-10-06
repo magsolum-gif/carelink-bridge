@@ -11,6 +11,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install Browser for CAPTCHA
+        run: npx playwright install --with-deps chromium
       - run: npm install
       - run: npm run build
       - run: npm start
