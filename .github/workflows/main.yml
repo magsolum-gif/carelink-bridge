@@ -11,11 +11,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
+      - run: npm install
       - run: npm run build
       - run: npm start
         env:
           CARELINK_USERNAME: ${{ secrets.CARELINK_USERNAME }}
           CARELINK_PASSWORD: ${{ secrets.CARELINK_PASSWORD }}
+          CARELINK_REGION: ${{ secrets.CARELINK_REGION }}
+          CARELINK_PATIENT: ${{ secrets.CARELINK_PATIENT }}
           NS: ${{ secrets.NS }}
           API_SECRET: ${{ secrets.API_SECRET }}
