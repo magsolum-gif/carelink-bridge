@@ -32,7 +32,6 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const MAX_REQUESTS_PER_FETCH = 30;
-const DEFAULT_MAX_RETRY_DURATION = 512;
 
 export interface CareLinkClientOptions {
   username: string;
@@ -87,7 +86,6 @@ export class CareLinkClient {
       'logindata.json',
     );
 
-    // Load proxy list
     const useProxy =
       (process.env['USE_PROXY'] || 'true').toLowerCase() !==
       'false';
@@ -107,13 +105,11 @@ export class CareLinkClient {
       proxies,
     );
 
-    // Set up axios
     this.axiosInstance = axios.create({
       maxRedirects: 0,
       timeout: 15_000,
     });
 
-    // Response interceptor: treat 2xx/3xx as success
     this.axiosInstance.interceptors.response.use(
       response => response,
       error => {
@@ -128,7 +124,6 @@ export class CareLinkClient {
       },
     );
 
-    // Request interceptor: count requests and set headers
     this.axiosInstance.interceptors.request.use(
       config => {
         this.requestCount++;
@@ -161,7 +156,6 @@ export class CareLinkClient {
       },
     );
 
-    // Apply first proxy
     if (this.proxyRotator.hasProxies) {
       this.applyProxy(
         this.proxyRotator.getNext(),
@@ -238,7 +232,7 @@ export class CareLinkClient {
         console.log(
           '[Token] Token refreshed successfully',
         );
-      } catch (e) {
+      } catch {
         try {
           fs.unlinkSync(
             this.loginDataPath,
@@ -332,20 +326,18 @@ export class CareLinkClient {
     }
 
     const endpoint =
-      'https://clcloud.minimed.eu/connect/carepartner/v13/display/message';
+      'https://clcloud.minimed.eu/connect/carepartner/v11/display/message';
 
     const body: Record<string, string> = {
       username:
         this.options.username,
       role: 'carepartner',
       patientId,
-      appVersion: '3.8.0',
-      os: 'android',
     };
 
     try {
       logger.log(
-        'Fetching CareLink Cumulus v13 data',
+        'Fetching CareLink v11 care-partner data',
       );
 
       const resp =
@@ -369,7 +361,7 @@ export class CareLinkClient {
         resp.data?.patientData
       ) {
         logger.log(
-          'CareLink Cumulus v13 data received',
+          'CareLink v11 data received',
         );
 
         const patientData =
@@ -384,10 +376,10 @@ export class CareLinkClient {
           patientData.sgs.sort(
             (a, b) =>
               new Date(
-                a.datetime || 0,
+                b.timestamp || 0,
               ).getTime() -
               new Date(
-                b.datetime || 0,
+                a.timestamp || 0,
               ).getTime(),
           );
         }
@@ -396,7 +388,7 @@ export class CareLinkClient {
       }
 
       throw new Error(
-        `CareLink Cumulus returned HTTP ${resp.status} without patientData`,
+        `CareLink v11 returned HTTP ${resp.status} without patientData`,
       );
     } catch (error: unknown) {
       const err = error as {
@@ -408,7 +400,7 @@ export class CareLinkClient {
       };
 
       console.error(
-        '[CareLink Cumulus] Request failed:',
+        '[CareLink v11] Request failed:',
         err.response?.status ??
           err.message ??
           'unknown error',
@@ -416,7 +408,7 @@ export class CareLinkClient {
 
       if (err.response?.data) {
         console.error(
-          '[CareLink Cumulus] Response:',
+          '[CareLink v11] Response:',
           JSON.stringify(
             err.response.data,
           ),
