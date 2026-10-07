@@ -26,6 +26,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Create CareLink login data
+        env:
+          CARELINK_LOGINDATA: ${{ secrets.CARELINK_LOGINDATA }}
+        run: printf '%s' "$CARELINK_LOGINDATA" > logindata.json
+
       - name: Run Bridge
         run: timeout 90s npm start || test $? -eq 124
         env:
