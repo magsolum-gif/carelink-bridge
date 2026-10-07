@@ -3,9 +3,22 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import axios, { type AxiosInstance } from 'axios';
 import * as logger from '../logger.js';
-import { loadLoginData, saveLoginData, isTokenExpired, refreshToken } from './token.js';
-import { loadProxyList, createProxyAgent, ProxyRotator } from './proxy.js';
-import { resolveServerName, buildUrls, type CareLinkUrls } from './urls.js';
+import {
+  loadLoginData,
+  saveLoginData,
+  isTokenExpired,
+  refreshToken,
+} from './token.js';
+import {
+  loadProxyList,
+  createProxyAgent,
+  ProxyRotator,
+} from './proxy.js';
+import {
+  resolveServerName,
+  buildUrls,
+  type CareLinkUrls,
+} from './urls.js';
 import type {
   CareLinkData,
   CareLinkUserInfo,
@@ -55,7 +68,8 @@ export class CareLinkClient {
       'en';
 
     this.serverName = resolveServerName(
-      options.server || process.env['MMCONNECT_SERVER'],
+      options.server ||
+        process.env['MMCONNECT_SERVER'],
       options.serverName ||
         process.env['MMCONNECT_SERVERNAME'],
     );
@@ -89,7 +103,9 @@ export class CareLinkClient {
       ? loadProxyList(proxyFile)
       : [];
 
-    this.proxyRotator = new ProxyRotator(proxies);
+    this.proxyRotator = new ProxyRotator(
+      proxies,
+    );
 
     // Set up axios
     this.axiosInstance = axios.create({
@@ -126,14 +142,20 @@ export class CareLinkClient {
           );
         }
 
-        config.headers['User-Agent'] = USER_AGENT;
+        config.headers['User-Agent'] =
+          USER_AGENT;
+
         config.headers['Accept'] =
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
+          'application/json, text/plain, */*';
+
         config.headers['Accept-Language'] =
           'en-US,en;q=0.9';
+
         config.headers['Accept-Encoding'] =
           'gzip, deflate';
-        config.headers['Connection'] = 'keep-alive';
+
+        config.headers['Connection'] =
+          'keep-alive';
 
         return config;
       },
@@ -200,6 +222,10 @@ export class CareLinkClient {
       )
     ) {
       try {
+        console.log(
+          '[Token] Refreshing access token...',
+        );
+
         loginData = await refreshToken(
           loginData,
         );
@@ -208,8 +234,11 @@ export class CareLinkClient {
           this.loginDataPath,
           loginData,
         );
+
+        console.log(
+          '[Token] Token refreshed successfully',
+        );
       } catch (e) {
-        // Delete stale logindata so next startup triggers re-login
         try {
           fs.unlinkSync(
             this.loginDataPath,
@@ -281,7 +310,9 @@ export class CareLinkClient {
       const patientsResp =
         await this.axiosInstance.get<
           CareLinkPatientLink[]
-        >(this.urls.linkedPatients);
+        >(
+          this.urls.linkedPatients,
+        );
 
       if (
         patientsResp.data?.length > 0
@@ -300,16 +331,16 @@ export class CareLinkClient {
       }
     }
 
-    // CareLink Cumulus v13 endpoint.
-    // The v13 endpoint is required for the current CareLink API.
     const endpoint =
       'https://clcloud.minimed.eu/connect/carepartner/v13/display/message';
 
     const body: Record<string, string> = {
-      username: this.options.username,
+      username:
+        this.options.username,
       role: 'carepartner',
       patientId,
       appVersion: '3.8.0',
+      os: 'android',
     };
 
     try {
@@ -344,8 +375,6 @@ export class CareLinkClient {
         const patientData =
           resp.data.patientData;
 
-        // CareLinkSG uses "datetime", not "timestamp".
-        // Sort newest first.
         if (
           patientData.sgs &&
           Array.isArray(
@@ -355,10 +384,10 @@ export class CareLinkClient {
           patientData.sgs.sort(
             (a, b) =>
               new Date(
-                b.datetime || 0,
+                a.datetime || 0,
               ).getTime() -
               new Date(
-                a.datetime || 0,
+                b.datetime || 0,
               ).getTime(),
           );
         }
@@ -385,6 +414,15 @@ export class CareLinkClient {
           'unknown error',
       );
 
+      if (err.response?.data) {
+        console.error(
+          '[CareLink Cumulus] Response:',
+          JSON.stringify(
+            err.response.data,
+          ),
+        );
+      }
+
       throw error;
     }
   }
@@ -398,7 +436,9 @@ export class CareLinkClient {
 
     return (
       deviceFamily.includes('BLE') ||
-      deviceFamily.includes('SIMPLERA')
+      deviceFamily.includes(
+        'SIMPLERA',
+      )
     );
   }
 
@@ -436,12 +476,14 @@ export class CareLinkClient {
     }
 
     const body: Record<string, string> = {
-      username: this.options.username,
+      username:
+        this.options.username,
       role,
     };
 
     if (patientId) {
-      body.patientId = patientId;
+      body.patientId =
+        patientId;
     }
 
     const resp =
@@ -476,7 +518,6 @@ export class CareLinkClient {
   }
 
   private async fetchAsPatient(): Promise<CareLinkData> {
-    // Try the monitor endpoint first
     try {
       const resp =
         await this.axiosInstance.get<CareLinkData>(
@@ -516,7 +557,6 @@ export class CareLinkClient {
       // Fall through to legacy endpoint
     }
 
-    // Fall back to legacy connect endpoint
     const url =
       this.urls.connectData(
         Date.now(),
