@@ -1,21 +1,31 @@
 name: Run Bridge
+
 on:
   workflow_dispatch:
   schedule:
     - cron: '*/5 * * * *'
+
 jobs:
   run-bridge:
     runs-on: ubuntu-latest
+    timeout-minutes: 4
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install Browser for CAPTCHA
-        run: npx playwright install --with-deps chromium
-      - run: npm install
-      - run: npm run build
-      - run: npm start
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Bridge
+        run: timeout 90s npm start || test $? -eq 124
         env:
           CARELINK_USERNAME: ${{ secrets.CARELINK_USERNAME }}
           CARELINK_PASSWORD: ${{ secrets.CARELINK_PASSWORD }}
