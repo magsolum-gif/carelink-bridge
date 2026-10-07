@@ -40,3 +40,4 @@ jobs:
           CARELINK_PATIENT: ${{ secrets.CARELINK_PATIENT }}
           NS: ${{ secrets.NS }}
           API_SECRET: ${{ secrets.API_SECRET }}
+          USE_PROXY: 'false'
