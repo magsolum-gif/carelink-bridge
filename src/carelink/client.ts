@@ -6,11 +6,18 @@ import * as logger from '../logger.js';
 import { loadLoginData, saveLoginData, isTokenExpired, refreshToken } from './token.js';
 import { loadProxyList, createProxyAgent, ProxyRotator } from './proxy.js';
 import { resolveServerName, buildUrls, type CareLinkUrls } from './urls.js';
-import type { CareLinkData, CareLinkUserInfo, CareLinkPatientLink, CareLinkCountrySettings } from '../types/carelink.js';
+import type {
+  CareLinkData,
+  CareLinkUserInfo,
+  CareLinkPatientLink,
+  CareLinkCountrySettings,
+} from '../types/carelink.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 const MAX_REQUESTS_PER_FETCH = 30;
 const DEFAULT_MAX_RETRY_DURATION = 512;
 
@@ -37,21 +44,51 @@ export class CareLinkClient {
   constructor(options: CareLinkClientOptions) {
     this.options = options;
 
-    const countryCode = options.countryCode || process.env['MMCONNECT_COUNTRYCODE'] || 'gb';
-    const lang = options.lang || process.env['MMCONNECT_LANGCODE'] || 'en';
+    const countryCode =
+      options.countryCode ||
+      process.env['MMCONNECT_COUNTRYCODE'] ||
+      'gb';
+
+    const lang =
+      options.lang ||
+      process.env['MMCONNECT_LANGCODE'] ||
+      'en';
 
     this.serverName = resolveServerName(
       options.server || process.env['MMCONNECT_SERVER'],
-      options.serverName || process.env['MMCONNECT_SERVERNAME'],
+      options.serverName ||
+        process.env['MMCONNECT_SERVERNAME'],
     );
 
-    this.urls = buildUrls(this.serverName, countryCode, lang);
-    this.loginDataPath = path.join(__dirname, '..', '..', 'logindata.json');
+    this.urls = buildUrls(
+      this.serverName,
+      countryCode,
+      lang,
+    );
+
+    this.loginDataPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'logindata.json',
+    );
 
     // Load proxy list
-    const useProxy = (process.env['USE_PROXY'] || 'true').toLowerCase() !== 'false';
-    const proxyFile = path.join(__dirname, '..', '..', 'https.txt');
-    const proxies = useProxy ? loadProxyList(proxyFile) : [];
+    const useProxy =
+      (process.env['USE_PROXY'] || 'true').toLowerCase() !==
+      'false';
+
+    const proxyFile = path.join(
+      __dirname,
+      '..',
+      '..',
+      'https.txt',
+    );
+
+    const proxies = useProxy
+      ? loadProxyList(proxyFile)
+      : [];
+
     this.proxyRotator = new ProxyRotator(proxies);
 
     // Set up axios
@@ -64,7 +101,10 @@ export class CareLinkClient {
     this.axiosInstance.interceptors.response.use(
       response => response,
       error => {
-        if (error.response?.status >= 200 && error.response?.status < 400) {
+        if (
+          error.response?.status >= 200 &&
+          error.response?.status < 400
+        ) {
           return error.response;
         }
 
@@ -73,25 +113,37 @@ export class CareLinkClient {
     );
 
     // Request interceptor: count requests and set headers
-    this.axiosInstance.interceptors.request.use(config => {
-      this.requestCount++;
+    this.axiosInstance.interceptors.request.use(
+      config => {
+        this.requestCount++;
 
-      if (this.requestCount > MAX_REQUESTS_PER_FETCH) {
-        throw new Error('Request count exceeds the maximum in one fetch!');
-      }
+        if (
+          this.requestCount >
+          MAX_REQUESTS_PER_FETCH
+        ) {
+          throw new Error(
+            'Request count exceeds the maximum in one fetch!',
+          );
+        }
 
-      config.headers['User-Agent'] = USER_AGENT;
-      config.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
-      config.headers['Accept-Language'] = 'en-US,en;q=0.9';
-      config.headers['Accept-Encoding'] = 'gzip, deflate';
-      config.headers['Connection'] = 'keep-alive';
+        config.headers['User-Agent'] = USER_AGENT;
+        config.headers['Accept'] =
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
+        config.headers['Accept-Language'] =
+          'en-US,en;q=0.9';
+        config.headers['Accept-Encoding'] =
+          'gzip, deflate';
+        config.headers['Connection'] = 'keep-alive';
 
-      return config;
-    });
+        return config;
+      },
+    );
 
     // Apply first proxy
     if (this.proxyRotator.hasProxies) {
-      this.applyProxy(this.proxyRotator.getNext());
+      this.applyProxy(
+        this.proxyRotator.getNext(),
+      );
     }
   }
 
@@ -108,21 +160,33 @@ export class CareLinkClient {
       const agent = createProxyAgent(proxy);
 
       if (agent) {
-        this.axiosInstance.defaults.httpsAgent = agent;
-        this.axiosInstance.defaults.httpAgent = agent;
+        this.axiosInstance.defaults.httpsAgent =
+          agent;
+
+        this.axiosInstance.defaults.httpAgent =
+          agent;
 
         console.log(
-          `[Proxy] Using proxy: ${proxy.ip}:${proxy.port}${proxy.username ? ' (authenticated)' : ''}`,
+          `[Proxy] Using proxy: ${proxy.ip}:${proxy.port}${
+            proxy.username
+              ? ' (authenticated)'
+              : ''
+          }`,
         );
       }
     } else {
-      this.axiosInstance.defaults.httpsAgent = undefined;
-      this.axiosInstance.defaults.httpAgent = undefined;
+      this.axiosInstance.defaults.httpsAgent =
+        undefined;
+
+      this.axiosInstance.defaults.httpAgent =
+        undefined;
     }
   }
 
   private async authenticate(): Promise<void> {
-    let loginData = loadLoginData(this.loginDataPath);
+    let loginData = loadLoginData(
+      this.loginDataPath,
+    );
 
     if (!loginData) {
       throw new Error(
@@ -130,14 +194,26 @@ export class CareLinkClient {
       );
     }
 
-    if (isTokenExpired(loginData.access_token)) {
+    if (
+      isTokenExpired(
+        loginData.access_token,
+      )
+    ) {
       try {
-        loginData = await refreshToken(loginData);
-        saveLoginData(this.loginDataPath, loginData);
+        loginData = await refreshToken(
+          loginData,
+        );
+
+        saveLoginData(
+          this.loginDataPath,
+          loginData,
+        );
       } catch (e) {
         // Delete stale logindata so next startup triggers re-login
         try {
-          fs.unlinkSync(this.loginDataPath);
+          fs.unlinkSync(
+            this.loginDataPath,
+          );
         } catch {
           // ignore
         }
@@ -152,50 +228,80 @@ export class CareLinkClient {
       }
     }
 
-    this.axiosInstance.defaults.headers.common['Authorization'] =
-      'Bearer ' + loginData.access_token;
+    this.axiosInstance.defaults.headers.common[
+      'Authorization'
+    ] =
+      'Bearer ' +
+      loginData.access_token;
 
-    console.log('[Token] Using token-based auth from logindata.json');
+    console.log(
+      '[Token] Using token-based auth from logindata.json',
+    );
   }
 
   private async getCurrentRole(): Promise<string> {
-    const resp = await this.axiosInstance.get<CareLinkUserInfo>(this.urls.me);
+    const resp =
+      await this.axiosInstance.get<CareLinkUserInfo>(
+        this.urls.me,
+      );
 
-    return resp.data?.role?.toUpperCase() ?? '';
+    return (
+      resp.data?.role?.toUpperCase() ?? ''
+    );
   }
 
   private async getConnectData(): Promise<CareLinkData> {
-    const role = await this.getCurrentRole();
+    const role =
+      await this.getCurrentRole();
 
-    logger.log('getConnectData - currentRole:', role);
+    logger.log(
+      'getConnectData - currentRole:',
+      role,
+    );
 
-    if (role === 'CARE_PARTNER_OUS' || role === 'CARE_PARTNER') {
-      return this.fetchAsCarepartner(role);
+    if (
+      role === 'CARE_PARTNER_OUS' ||
+      role === 'CARE_PARTNER'
+    ) {
+      return this.fetchAsCarepartner(
+        role,
+      );
     }
 
     return this.fetchAsPatient();
   }
 
-  private async fetchAsCarepartner(_role: string): Promise<CareLinkData> {
-    let patientId = this.options.patientId;
+  private async fetchAsCarepartner(
+    _role: string,
+  ): Promise<CareLinkData> {
+    let patientId =
+      this.options.patientId;
 
     if (!patientId) {
-      const patientsResp = await this.axiosInstance.get<CareLinkPatientLink[]>(
-        this.urls.linkedPatients,
-      );
+      const patientsResp =
+        await this.axiosInstance.get<
+          CareLinkPatientLink[]
+        >(this.urls.linkedPatients);
 
-      if (patientsResp.data?.length > 0) {
-        patientId = patientsResp.data[0].username;
+      if (
+        patientsResp.data?.length > 0
+      ) {
+        patientId =
+          patientsResp.data[0].username;
 
-        logger.log('Using linked patient:', patientId);
+        logger.log(
+          'Using linked patient:',
+          patientId,
+        );
       } else {
-        throw new Error('No linked patients found for care partner account');
+        throw new Error(
+          'No linked patients found for care partner account',
+        );
       }
     }
 
     // CareLink Cumulus v13 endpoint.
     // The v13 endpoint is required for the current CareLink API.
-    // The appVersion must be >= 3.7; 3.8.0 is known to work.
     const endpoint =
       'https://clcloud.minimed.eu/connect/carepartner/v13/display/message';
 
@@ -207,33 +313,53 @@ export class CareLinkClient {
     };
 
     try {
-      logger.log('Fetching CareLink Cumulus v13 data');
+      logger.log(
+        'Fetching CareLink Cumulus v13 data',
+      );
 
-      const resp = await this.axiosInstance.post<{
-        patientData?: CareLinkData;
-      }>(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      });
+      const resp =
+        await this.axiosInstance.post<{
+          patientData?: CareLinkData;
+        }>(
+          endpoint,
+          body,
+          {
+            headers: {
+              'Content-Type':
+                'application/json',
+              Accept:
+                'application/json',
+            },
+          },
+        );
 
-      if (resp.status === 200 && resp.data?.patientData) {
-        logger.log('CareLink Cumulus v13 data received');
+      if (
+        resp.status === 200 &&
+        resp.data?.patientData
+      ) {
+        logger.log(
+          'CareLink Cumulus v13 data received',
+        );
 
-        const patientData = resp.data.patientData;
+        const patientData =
+          resp.data.patientData;
 
-        // Cumulus does not guarantee that SGS readings are sorted.
-        // Sort newest first so the rest of the bridge sees the latest
-        // glucose reading first.
+        // CareLinkSG uses "datetime", not "timestamp".
+        // Sort newest first.
         if (
           patientData.sgs &&
-          Array.isArray(patientData.sgs)
+          Array.isArray(
+            patientData.sgs,
+          )
         ) {
           patientData.sgs.sort(
             (a, b) =>
-              new Date(b.timestamp || 0).getTime() -
-              new Date(a.timestamp || 0).getTime(),
+              new Date(
+                b.datetime || 0,
+              ).getTime() -
+              new Date(
+                a.datetime || 0,
+              ).getTime(),
           );
         }
 
@@ -254,15 +380,21 @@ export class CareLinkClient {
 
       console.error(
         '[CareLink Cumulus] Request failed:',
-        err.response?.status ?? err.message ?? 'unknown error',
+        err.response?.status ??
+          err.message ??
+          'unknown error',
       );
 
       throw error;
     }
   }
 
-  private isBleDevice(deviceFamily: string | undefined): boolean {
-    if (!deviceFamily) return false;
+  private isBleDevice(
+    deviceFamily: string | undefined,
+  ): boolean {
+    if (!deviceFamily) {
+      return false;
+    }
 
     return (
       deviceFamily.includes('BLE') ||
@@ -274,24 +406,33 @@ export class CareLinkClient {
     patientId?: string,
     role: string = 'patient',
   ): Promise<CareLinkData> {
-    logger.log('Fetching BLE device data');
+    logger.log(
+      'Fetching BLE device data',
+    );
 
     const settingsResp =
       await this.axiosInstance.get<CareLinkCountrySettings>(
         this.urls.countrySettings,
       );
 
-    const bleEndpoint = settingsResp.data?.blePereodicDataEndpoint;
+    const bleEndpoint =
+      settingsResp.data
+        ?.blePereodicDataEndpoint;
 
     if (!bleEndpoint) {
-      throw new Error('No BLE endpoint found in country settings');
+      throw new Error(
+        'No BLE endpoint found in country settings',
+      );
     }
 
     if (!patientId) {
       const userResp =
-        await this.axiosInstance.get<CareLinkUserInfo>(this.urls.me);
+        await this.axiosInstance.get<CareLinkUserInfo>(
+          this.urls.me,
+        );
 
-      patientId = userResp.data?.id;
+      patientId =
+        userResp.data?.id;
     }
 
     const body: Record<string, string> = {
@@ -303,28 +444,39 @@ export class CareLinkClient {
       body.patientId = patientId;
     }
 
-    const resp = await this.axiosInstance.post<CareLinkData>(
-      bleEndpoint,
-      body,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/plain, */*',
+    const resp =
+      await this.axiosInstance.post<CareLinkData>(
+        bleEndpoint,
+        body,
+        {
+          headers: {
+            'Content-Type':
+              'application/json',
+            Accept:
+              'application/json, text/plain, */*',
+          },
         },
-      },
-    );
+      );
 
-    if (resp.data && resp.status === 200) {
-      logger.log('GET data (BLE)', bleEndpoint);
+    if (
+      resp.data &&
+      resp.status === 200
+    ) {
+      logger.log(
+        'GET data (BLE)',
+        bleEndpoint,
+      );
 
       return resp.data;
     }
 
-    throw new Error('BLE endpoint returned empty data');
+    throw new Error(
+      'BLE endpoint returned empty data',
+    );
   }
 
   private async fetchAsPatient(): Promise<CareLinkData> {
-    // Try the monitor endpoint first (works for 7xxG pumps)
+    // Try the monitor endpoint first
     try {
       const resp =
         await this.axiosInstance.get<CareLinkData>(
@@ -342,15 +494,21 @@ export class CareLinkClient {
           'BLE device detected, using BLE endpoint',
         );
 
-        return this.fetchBleDeviceData(this.options.username);
+        return this.fetchBleDeviceData(
+          this.options.username,
+        );
       }
 
       if (
         resp.status === 200 &&
         resp.data &&
-        Object.keys(resp.data).length > 1
+        Object.keys(resp.data)
+          .length > 1
       ) {
-        logger.log('GET data', this.urls.monitorData);
+        logger.log(
+          'GET data',
+          this.urls.monitorData,
+        );
 
         return resp.data;
       }
@@ -359,11 +517,20 @@ export class CareLinkClient {
     }
 
     // Fall back to legacy connect endpoint
-    const url = this.urls.connectData(Date.now());
-    const resp =
-      await this.axiosInstance.get<CareLinkData>(url);
+    const url =
+      this.urls.connectData(
+        Date.now(),
+      );
 
-    logger.log('GET data', url);
+    const resp =
+      await this.axiosInstance.get<CareLinkData>(
+        url,
+      );
+
+    logger.log(
+      'GET data',
+      url,
+    );
 
     return resp.data;
   }
@@ -372,33 +539,49 @@ export class CareLinkClient {
     this.requestCount = 0;
     this.proxyRotator.resetRetries();
 
-    const maxRetry = this.proxyRotator.hasProxies ? 10 : 1;
+    const maxRetry =
+      this.proxyRotator.hasProxies
+        ? 10
+        : 1;
 
     console.log(
       '[Fetch] Starting fetch, max retries:',
       maxRetry,
     );
 
-    for (let i = 1; i <= maxRetry; i++) {
+    for (
+      let i = 1;
+      i <= maxRetry;
+      i++
+    ) {
       try {
         this.requestCount = 0;
 
         await this.authenticate();
 
-        const data = await this.getConnectData();
+        const data =
+          await this.getConnectData();
 
-        console.log('[Fetch] Success!');
+        console.log(
+          '[Fetch] Success!',
+        );
 
         return data;
       } catch (e: unknown) {
         const err = e as {
-          response?: { status: number };
+          response?: {
+            status: number;
+          };
           code?: string;
-          cause?: { code?: string };
+          cause?: {
+            code?: string;
+          };
           message?: string;
         };
 
-        const httpStatus = err.response?.status;
+        const httpStatus =
+          err.response?.status;
+
         const errorCode =
           err.code ||
           err.cause?.code ||
@@ -410,7 +593,9 @@ export class CareLinkClient {
           407,
           502,
           503,
-        ].includes(httpStatus ?? 0);
+        ].includes(
+          httpStatus ?? 0,
+        );
 
         const isNetworkError = [
           'ECONNREFUSED',
@@ -419,19 +604,23 @@ export class CareLinkClient {
           'ENOTFOUND',
           'EPROTO',
           'ERR_SOCKET_BAD_PORT',
-        ].includes(errorCode);
+        ].includes(
+          errorCode,
+        );
 
         console.log(
           `[Fetch] Attempt ${i} failed: ${
             httpStatus
               ? 'HTTP ' + httpStatus
               : errorCode ||
-                (err as Error).message
+                (err as Error)
+                  .message
           }`,
         );
 
         if (
-          (isProxyError || isNetworkError) &&
+          (isProxyError ||
+            isNetworkError) &&
           this.proxyRotator.hasProxies
         ) {
           console.log(
@@ -445,7 +634,9 @@ export class CareLinkClient {
             throw e;
           }
 
-          this.applyProxy(nextProxy);
+          this.applyProxy(
+            nextProxy,
+          );
 
           await sleep(1000);
 
@@ -456,9 +647,12 @@ export class CareLinkClient {
           throw e;
         }
 
-        const timeout = Math.pow(2, i);
+        const timeout =
+          Math.pow(2, i);
 
-        await sleep(1000 * timeout);
+        await sleep(
+          1000 * timeout,
+        );
       }
     }
 
@@ -468,8 +662,14 @@ export class CareLinkClient {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve =>
-    setTimeout(resolve, ms),
+function sleep(
+  ms: number,
+): Promise<void> {
+  return new Promise(
+    resolve =>
+      setTimeout(
+        resolve,
+        ms,
+      ),
   );
 }
