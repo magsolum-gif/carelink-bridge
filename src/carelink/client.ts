@@ -376,10 +376,10 @@ export class CareLinkClient {
           patientData.sgs.sort(
             (a, b) =>
               new Date(
-                b.timestamp || 0,
+                b.datetime || 0,
               ).getTime() -
               new Date(
-                a.timestamp || 0,
+                a.datetime || 0,
               ).getTime(),
           );
         }
