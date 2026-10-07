@@ -141,6 +141,7 @@ export class CareLinkClient {
     if (role === 'CARE_PARTNER_OUS' || role === 'CARE_PARTNER') {
       return this.fetchAsCarepartner(role);
     }
+
     return this.fetchAsPatient();
   }
 
@@ -148,7 +149,10 @@ export class CareLinkClient {
     let patientId = this.options.patientId;
 
     if (!patientId) {
-      const patientsResp = await this.axiosInstance.get<CareLinkPatientLink[]>(this.urls.linkedPatients);
+      const patientsResp = await this.axiosInstance.get<CareLinkPatientLink[]>(
+        this.urls.linkedPatients,
+      );
+
       if (patientsResp.data?.length > 0) {
         patientId = patientsResp.data[0].username;
         logger.log('Using linked patient:', patientId);
@@ -157,59 +161,75 @@ export class CareLinkClient {
       }
     }
 
-    // Check if patient has a BLE device by fetching monitor data first
-    try {
-      const monitorResp = await this.axiosInstance.get<CareLinkData>(this.urls.monitorData);
-      if (monitorResp.data && this.isBleDevice(monitorResp.data.deviceFamily || monitorResp.data.medicalDeviceFamily)) {
-        logger.log('BLE device detected for carepartner, using BLE endpoint');
-        return this.fetchBleDeviceData(patientId, 'carepartner');
-      }
-    } catch {
-      // Fall through to standard carepartner flow
-    }
-
-    // Standard carepartner flow: BLE endpoint with multi-version fallback
-    logger.log('Fetching country settings from:', this.urls.countrySettings);
-    const settingsResp = await this.axiosInstance.get<CareLinkCountrySettings>(this.urls.countrySettings);
-    const dataRetrievalUrl = settingsResp.data?.blePereodicDataEndpoint;
-
-    if (!dataRetrievalUrl) {
-      throw new Error('Unable to retrieve data retrieval URL for care partner account');
-    }
-
-    logger.log('Data retrieval URL:', dataRetrievalUrl);
-
-    // Try multiple API versions
-    const endpoints = [
-      dataRetrievalUrl,
-      dataRetrievalUrl.replace('/v6/', '/v5/'),
-      dataRetrievalUrl.replace('/v6/', '/v11/'),
-      dataRetrievalUrl.replace('/v5/', '/v6/'),
-      dataRetrievalUrl.replace('/v5/', '/v11/'),
-    ];
+    // CareLink Cumulus v13 endpoint.
+    // The v13 endpoint is required for the current CareLink API.
+    // The appVersion must be >= 3.7; 3.8.0 is known to work.
+    const endpoint =
+      'https://clcloud.minimed.eu/connect/carepartner/v13/display/message';
 
     const body: Record<string, string> = {
       username: this.options.username,
       role: 'carepartner',
       patientId,
+      appVersion: '3.8.0',
     };
 
-    for (const endpoint of endpoints) {
-      try {
-        logger.log('Trying carepartner endpoint:', endpoint);
-        const resp = await this.axiosInstance.post<CareLinkData>(endpoint, body, {
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (resp.status === 200) {
-          logger.log('GET data (as carepartner)', endpoint);
-          return resp.data;
-        }
-      } catch {
-        logger.log('Endpoint failed:', endpoint);
-      }
-    }
+    try {
+      logger.log('Fetching CareLink Cumulus v13 data');
 
-    throw new Error('All carepartner data endpoints failed');
+      const resp = await this.axiosInstance.post<{
+        patientData?: CareLinkData;
+      }>(endpoint, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (resp.status === 200 && resp.data?.patientData) {
+        logger.log('CareLink Cumulus v13 data received');
+
+        const patientData = resp.data.patientData;
+
+        // Cumulus does not guarantee that SGS readings are sorted.
+        // Sort newest first so the rest of the bridge sees the latest
+        // glucose reading first.
+        if (
+          patientData.sgs &&
+          Array.isArray(patientData.sgs)
+        ) {
+          patientData.sgs.sort(
+            (
+              a: { timestamp?: string },
+              b: { timestamp?: string },
+            ) =>
+              new Date(b.timestamp || 0).getTime() -
+              new Date(a.timestamp || 0).getTime(),
+          );
+        }
+
+        return patientData;
+      }
+
+      throw new Error(
+        `CareLink Cumulus returned HTTP ${resp.status} without patientData`,
+      );
+    } catch (error: unknown) {
+      const err = error as {
+        response?: {
+          status?: number;
+          data?: unknown;
+        };
+        message?: string;
+      };
+
+      console.error(
+        '[CareLink Cumulus] Request failed:',
+        err.response?.status ?? err.message ?? 'unknown error',
+      );
+
+      throw error;
+    }
   }
 
   private isBleDevice(deviceFamily: string | undefined): boolean {
@@ -296,18 +316,39 @@ export class CareLinkClient {
         console.log('[Fetch] Success!');
         return data;
       } catch (e: unknown) {
-        const err = e as { response?: { status: number }; code?: string; cause?: { code?: string }; message?: string };
+        const err = e as {
+          response?: { status: number };
+          code?: string;
+          cause?: { code?: string };
+          message?: string;
+        };
+
         const httpStatus = err.response?.status;
         const errorCode = err.code || err.cause?.code || '';
         const isProxyError = [400, 403, 407, 502, 503].includes(httpStatus ?? 0);
-        const isNetworkError = ['ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EPROTO', 'ERR_SOCKET_BAD_PORT'].includes(errorCode);
+        const isNetworkError = [
+          'ECONNREFUSED',
+          'ETIMEDOUT',
+          'ECONNRESET',
+          'ENOTFOUND',
+          'EPROTO',
+          'ERR_SOCKET_BAD_PORT',
+        ].includes(errorCode);
 
-        console.log(`[Fetch] Attempt ${i} failed: ${httpStatus ? 'HTTP ' + httpStatus : errorCode || (err as Error).message}`);
+        console.log(
+          `[Fetch] Attempt ${i} failed: ${
+            httpStatus
+              ? 'HTTP ' + httpStatus
+              : errorCode || (err as Error).message
+          }`,
+        );
 
         if ((isProxyError || isNetworkError) && this.proxyRotator.hasProxies) {
           console.log('[Fetch] Trying next proxy...');
           const nextProxy = this.proxyRotator.tryNext();
+
           if (!nextProxy) throw e;
+
           this.applyProxy(nextProxy);
           await sleep(1000);
           continue;
